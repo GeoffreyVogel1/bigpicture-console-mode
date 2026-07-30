@@ -1,0 +1,12 @@
+[Unit]
+Description=Switch displays/TV + audio based on Steam Big Picture
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/bigpicture-screens.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

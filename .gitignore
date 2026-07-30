@@ -1,0 +1,7 @@
+# Fichiers temporaires
+*.tmp
+*.bak
+*~
+
+# Logs
+*.log
