@@ -6,6 +6,15 @@ then restores everything when you exit.
 
 Built for a multi-monitor + TV setup, with automatic priority given to a Bluetooth headset.
 
+It also solves the well-known problem where **games launched from Big Picture land on the
+wrong display on KDE Wayland**: by turning off the other displays while in Big Picture, the
+only remaining output is the TV, so every game ends up there without any per-game rules.
+
+> **Note:** this whole project — script, service, installer and docs — was built with the
+> help of [Claude](https://claude.ai) (Anthropic), through an iterative debugging session
+> on a real machine. Config values in the script are specific to that setup; see
+> "Adapting to your hardware" below to make it yours.
+
 ## What it does
 
 - **Big Picture launched** → the TV turns on (alone), the desktop displays turn off, sound moves to the TV. Games launched from Big Picture therefore all land on the TV.
@@ -133,6 +142,21 @@ A systemd user service runs a loop that, every 2 seconds:
 
 Audio sinks are resolved by **`node.name` prefix** (via `pw-dump | jq`) because the ID
 and suffix change depending on which outputs are active.
+
+## Background
+
+On Windows, switching display + audio for Big Picture has been solved for years (AutoHotKey
+scripts, tray apps, etc.). On Linux — especially KDE Plasma Wayland — there was no
+equivalent all-in-one solution: existing tips only cover isolated pieces (forcing Big
+Picture onto one screen via KWin rules, changing resolution per game, switching audio by
+hand), and the "games launch on the wrong screen" problem was a recurring, unsolved
+complaint.
+
+This project combines everything into a single automatic service: window detection,
+display switching, audio routing, Bluetooth priority and anti-flicker hysteresis — with no
+per-game configuration.
+
+Built with [Claude](https://claude.ai) (Anthropic).
 
 ## License
 
