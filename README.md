@@ -102,6 +102,39 @@ After any change:
 systemctl --user restart bigpicture-screens.service
 ```
 
+## Optional: waking the TV via Home Assistant (no CEC)
+
+Some GPUs/drivers never send a CEC power-on signal over HDMI, so the TV stays in
+standby even though the display output is enabled. If you have the TV exposed as a
+`media_player` entity in Home Assistant, the script can call it to wake the TV before
+switching to Big Picture.
+
+1. Create `~/.config/bigpicture-screens/secrets.conf` (outside this repo, never commit it):
+
+   ```bash
+   HA_URL="http://<home-assistant-host>:8123"
+   HA_TOKEN="<a Home Assistant long-lived access token>"
+   TV_ENTITY_ID="media_player.<your_tv_entity>"
+   TV_SOURCE="<HDMI input the PC is wired to, e.g. HDMI1, or leave empty to skip>"
+   ```
+
+   - Get a token from Home Assistant: your profile (bottom left) → Security →
+     Long-Lived Access Tokens.
+   - Find the entity_id under Settings → Devices & Services → Entities.
+   - Find the right HDMI input by checking which one shows as connected (e.g. a
+     `sensor.<tv>_active_source`-style entity's `connected_inputs` attribute, if your
+     integration exposes one) while only the PC is plugged in/powered.
+2. `chmod 600 ~/.config/bigpicture-screens/secrets.conf`.
+3. Restart the service: `systemctl --user restart bigpicture-screens.service`.
+
+If `secrets.conf` doesn't exist, this step is skipped entirely and nothing changes.
+
+⚠️ The wake-up call only fires when the TV's reported state is exactly `off`. This is
+intentional: some Home Assistant TV integrations send a raw power-*toggle* key when they
+can't otherwise confirm the current state (e.g. the state is `unavailable`/`unknown`), which
+could turn an already-on TV **off** instead of waking it. As a result, a TV in deep
+standby/fully unreachable won't be woken by this — only a TV correctly reporting `off`.
+
 ## Usage
 
 Nothing to do day to day: launch Steam Big Picture as usual, everything switches on its own.

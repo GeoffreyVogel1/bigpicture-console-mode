@@ -5,3 +5,7 @@
 
 # Logs
 *.log
+
+# Secrets (should live in ~/.config/bigpicture-screens/, never in the repo)
+secrets.conf
+*.secrets

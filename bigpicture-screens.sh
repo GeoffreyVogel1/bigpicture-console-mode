@@ -38,6 +38,13 @@ BP_TITLE="Steam Big Picture Mode"
 # Prevents false switches when a game comes to the foreground. 4 = ~8s.
 HYSTERESIS=4
 
+# Optional: wake the TV via Home Assistant when the GPU doesn't send a CEC
+# power-on signal over HDMI. Set HA_URL/HA_TOKEN/TV_ENTITY_ID in
+# ~/.config/bigpicture-screens/secrets.conf (see README) to enable this; left
+# unset, this step is skipped entirely.
+HA_SECRETS="$HOME/.config/bigpicture-screens/secrets.conf"
+[ -f "$HA_SECRETS" ] && source "$HA_SECRETS"
+
 # ============================================================================
 #  LOGIC  --  don't edit unless you know what you're doing
 # ============================================================================
@@ -102,9 +109,36 @@ go_desktop() {
     pick_audio "$AUDIO_DESKTOP_PREFIX"
 }
 
+# Wake the TV via Home Assistant (works around the GPU not sending CEC).
+# Only fires when the TV is confirmed "off" -- anything else (on, unavailable,
+# unknown...) is left alone, since the integration behind TV_ENTITY_ID sends a
+# raw power-toggle key when it can't confirm the current state, which could
+# turn an already-on TV off instead of waking it.
+wake_tv() {
+    [ -z "$HA_URL" ] && return 0
+    local state
+    state=$(curl -s --max-time 3 -H "Authorization: Bearer $HA_TOKEN" \
+        "$HA_URL/api/states/$TV_ENTITY_ID" | jq -r '.state' 2>/dev/null)
+    if [ "$state" != "off" ]; then
+        return 0
+    fi
+    curl -s --max-time 5 -X POST \
+        -H "Authorization: Bearer $HA_TOKEN" -H "Content-Type: application/json" \
+        -d "{\"entity_id\": \"$TV_ENTITY_ID\"}" \
+        "$HA_URL/api/services/media_player/turn_on" >/dev/null
+    sleep 4
+    if [ -n "$TV_SOURCE" ]; then
+        curl -s --max-time 5 -X POST \
+            -H "Authorization: Bearer $HA_TOKEN" -H "Content-Type: application/json" \
+            -d "{\"entity_id\": \"$TV_ENTITY_ID\", \"source\": \"$TV_SOURCE\"}" \
+            "$HA_URL/api/services/media_player/select_source" >/dev/null
+    fi
+}
+
 # Switch to Big Picture: turn TV on, turn desktop displays off, TV audio.
 go_bigpicture() {
     local o
+    wake_tv
     kscreen-doctor output.$TV.enable
     sleep 1
     for o in "${DESKTOP_SCREENS[@]}"; do kscreen-doctor output.$o.disable; done
