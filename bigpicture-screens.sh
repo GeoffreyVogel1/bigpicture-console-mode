@@ -148,10 +148,27 @@ tv_connected() {
     [ "$c" = "true" ]
 }
 
+# True if $TV is enabled AND every desktop screen is disabled right now.
+# kscreen-doctor exits 0 even when it rejects a change (e.g. "Disabling all
+# outputs through configuration changes is not allowed"), so the only way to
+# know a switch actually took effect is to re-read the real output states.
+bigpicture_applied() {
+    local j o e
+    j=$(kscreen-doctor -j 2>/dev/null)
+    [ "$(echo "$j" | jq -r --arg n "$TV" '.outputs[]? | select(.name==$n) | .enabled')" = "true" ] || return 1
+    for o in "${DESKTOP_SCREENS[@]}"; do
+        e=$(echo "$j" | jq -r --arg n "$o" '.outputs[]? | select(.name==$n) | .enabled')
+        [ "$e" = "false" ] || return 1
+    done
+    return 0
+}
+
 # Switch to Big Picture: turn TV on, turn desktop displays off, TV audio.
-# Returns failure (without touching the desktop displays) if the TV output
-# hasn't reappeared yet -- the caller retries on the next loop iteration
-# instead of disabling desktop screens with nowhere for the picture to go.
+# Returns failure if the switch doesn't actually stick -- the TV output not
+# having reappeared yet, or (right after a fresh hotplug) KWin briefly
+# refusing to disable the last desktop screen because it hasn't yet settled
+# on the TV being truly enabled. Either way the caller retries on the next
+# loop iteration rather than leaving things half-switched.
 go_bigpicture() {
     local o
     wake_tv
@@ -162,6 +179,10 @@ go_bigpicture() {
     kscreen-doctor output.$TV.enable
     sleep 1
     for o in "${DESKTOP_SCREENS[@]}"; do kscreen-doctor output.$o.disable; done
+    if ! bigpicture_applied; then
+        echo "go_bigpicture: switch didn't stick yet, will retry" >&2
+        return 1
+    fi
     pick_audio "$AUDIO_TV_PREFIX"
 }
 
