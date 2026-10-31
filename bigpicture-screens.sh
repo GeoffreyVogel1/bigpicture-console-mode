@@ -94,13 +94,14 @@ pick_audio() {
     fi
 }
 
-# Back to desktop: turn displays on, turn TV off, restore order, desktop audio.
+# Back to desktop: turn displays on, turn TV off (HA + HDMI), restore order, desktop audio.
 go_desktop() {
     local o
     for o in "${DESKTOP_SCREENS[@]}"; do kscreen-doctor output.$o.enable; done
     sleep 1
     kscreen-doctor output.$TV.disable
     sleep 1
+    sleep_tv
     local args=()
     for pair in "${SCREEN_PRIORITIES[@]}"; do
         args+=("output.${pair%%:*}.priority.${pair##*:}")
@@ -136,6 +137,23 @@ wake_tv() {
             -d "{\"entity_id\": \"$TV_ENTITY_ID\", \"source\": \"$TV_SOURCE\"}" \
             "$HA_URL/api/services/media_player/select_source" >/dev/null
     fi
+}
+
+# Power the TV off via Home Assistant when leaving Big Picture. Only fires
+# when the TV is confirmed "on", for the same reason as wake_tv: calling the
+# service when the state can't be confirmed risks a blind toggle.
+sleep_tv() {
+    [ -z "$HA_URL" ] && return 0
+    local state
+    state=$(curl -s --max-time 3 -H "Authorization: Bearer $HA_TOKEN" \
+        "$HA_URL/api/states/$TV_ENTITY_ID" | jq -r '.state' 2>/dev/null)
+    if [ "$state" != "on" ]; then
+        return 0
+    fi
+    curl -s --max-time 5 -X POST \
+        -H "Authorization: Bearer $HA_TOKEN" -H "Content-Type: application/json" \
+        -d "{\"entity_id\": \"$TV_ENTITY_ID\"}" \
+        "$HA_URL/api/services/media_player/turn_off" >/dev/null
 }
 
 # True if kscreen-doctor currently reports $TV as connected. When the TV is
