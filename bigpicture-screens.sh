@@ -138,10 +138,27 @@ wake_tv() {
     fi
 }
 
+# True if kscreen-doctor currently reports $TV as connected. When the TV is
+# fully power-cycled (not just CEC-standby), its HDMI hotplug-detect line
+# drops, so the GPU/KDE forgets the connector exists until the TV finishes
+# booting and re-asserts it -- which can take longer than wake_tv's wait.
+tv_connected() {
+    local c
+    c=$(kscreen-doctor -j 2>/dev/null | jq -r --arg n "$TV" '.outputs[]? | select(.name==$n) | .connected' 2>/dev/null)
+    [ "$c" = "true" ]
+}
+
 # Switch to Big Picture: turn TV on, turn desktop displays off, TV audio.
+# Returns failure (without touching the desktop displays) if the TV output
+# hasn't reappeared yet -- the caller retries on the next loop iteration
+# instead of disabling desktop screens with nowhere for the picture to go.
 go_bigpicture() {
     local o
     wake_tv
+    if ! tv_connected; then
+        echo "go_bigpicture: $TV not connected yet, will retry" >&2
+        return 1
+    fi
     kscreen-doctor output.$TV.enable
     sleep 1
     for o in "${DESKTOP_SCREENS[@]}"; do kscreen-doctor output.$o.disable; done
@@ -161,8 +178,7 @@ while true; do
     if bp_visible; then
         missing=0
         if [ "$state" != "bigpicture" ]; then
-            go_bigpicture
-            state="bigpicture"
+            go_bigpicture && state="bigpicture"
         fi
     else
         if [ "$state" = "bigpicture" ]; then
