@@ -109,24 +109,27 @@ go_desktop() {
     pick_audio "$AUDIO_DESKTOP_PREFIX"
 }
 
-# Wake the TV via Home Assistant (works around the GPU not sending CEC).
-# Only fires when the TV is confirmed "off" -- anything else (on, unavailable,
-# unknown...) is left alone, since the integration behind TV_ENTITY_ID sends a
-# raw power-toggle key when it can't confirm the current state, which could
-# turn an already-on TV off instead of waking it.
+# Wake the TV via Home Assistant (works around the GPU not sending CEC) and
+# switch it to the PC's input. The power-on call only fires when the TV is
+# confirmed "off" -- unavailable/unknown is left alone, since the integration
+# behind TV_ENTITY_ID sends a raw power-toggle key when it can't confirm the
+# current state, which could turn an already-on TV off instead of waking it.
+# Source selection runs whenever the TV is reachable (off-just-woken or
+# already on), so Big Picture always lands on the right input.
 wake_tv() {
     [ -z "$HA_URL" ] && return 0
     local state
     state=$(curl -s --max-time 3 -H "Authorization: Bearer $HA_TOKEN" \
         "$HA_URL/api/states/$TV_ENTITY_ID" | jq -r '.state' 2>/dev/null)
-    if [ "$state" != "off" ]; then
+    if [ "$state" = "off" ]; then
+        curl -s --max-time 5 -X POST \
+            -H "Authorization: Bearer $HA_TOKEN" -H "Content-Type: application/json" \
+            -d "{\"entity_id\": \"$TV_ENTITY_ID\"}" \
+            "$HA_URL/api/services/media_player/turn_on" >/dev/null
+        sleep 4
+    elif [ "$state" != "on" ]; then
         return 0
     fi
-    curl -s --max-time 5 -X POST \
-        -H "Authorization: Bearer $HA_TOKEN" -H "Content-Type: application/json" \
-        -d "{\"entity_id\": \"$TV_ENTITY_ID\"}" \
-        "$HA_URL/api/services/media_player/turn_on" >/dev/null
-    sleep 4
     if [ -n "$TV_SOURCE" ]; then
         curl -s --max-time 5 -X POST \
             -H "Authorization: Bearer $HA_TOKEN" -H "Content-Type: application/json" \
